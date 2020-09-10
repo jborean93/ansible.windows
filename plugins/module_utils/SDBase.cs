@@ -1,22 +1,22 @@
 using Microsoft.Win32.SafeHandles;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.ConstrainedExecution;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
+using Ansible.Privilege;
 
 //TypeAccelerator -Name Ansible.Windows.SDBase.SecurityDescriptorBase -TypeName SecurityDescriptorBase
+//TypeAccelerator -Name Ansible.Windows.SDBase.SecurityInformation -TypeName SecurityInformation
 
 namespace ansible_collections.ansible.windows.plugins.module_utils.SDBase
 {
-    internal class NativeHelpers
-    {
-
-    }
-
     internal class NativeMethods
     {
+        [DllImport("Kernel32.dll")]
+        public static extern bool CloseHandle(
+            IntPtr hObject);
+
         [DllImport("Advapi32.dll")]
         public static extern Int32 GetSecurityDescriptorLength(
             SafeSecurityDescriptorBuffer pSecurityDescriptor);
@@ -62,6 +62,18 @@ namespace ansible_collections.ansible.windows.plugins.module_utils.SDBase
         }
     }
 
+    internal class SafeNativeHandle : SafeHandleZeroOrMinusOneIsInvalid
+    {
+        public SafeNativeHandle() : base(true) { }
+        public SafeNativeHandle(IntPtr handle) : base(true) { this.handle = handle; }
+
+        [ReliabilityContract(Consistency.WillNotCorruptState, Cer.MayFail)]
+        protected override bool ReleaseHandle()
+        {
+            return NativeMethods.CloseHandle(handle);
+        }
+    }
+
     internal class SafeSecurityDescriptorBuffer : SafeHandleZeroOrMinusOneIsInvalid
     {
         public SafeSecurityDescriptorBuffer() : base(true) { }
@@ -87,7 +99,7 @@ namespace ansible_collections.ansible.windows.plugins.module_utils.SDBase
         AccessFilter = 0x00000100,
         Backup = 0x00010000,
         UnprotectedSacl = 0x10000000,
-        UnprotectedDacl = 0x20000000,        
+        UnprotectedDacl = 0x20000000,
         ProtectedSacl = 0x40000000,
         ProtectedDacl = 0x80000000,
     }
@@ -109,19 +121,33 @@ namespace ansible_collections.ansible.windows.plugins.module_utils.SDBase
         }
     }
 
-    public abstract class SecurityDescriptorBase
+    public abstract class SecurityDescriptorBase : IDisposable
     {
-        public abstract Dictionary<string, int> AccessRightMap;
-        public abstract SafeHandle Handle;
-        public abstract ResourceType ObjectType;
+        // Required rights to use when opening the handle
+        // READ_CONTROL | WRITE_DAC | WRITE_OWNER | ACCESS_SYSTEM_SECURITY
+        public static UInt32 RequiredHandleAccess = 0x00020000 | 0x00040000 | 0x00080000 | 0x01000000;
 
-        public RawSecurityDescriptor GetSecurityInfo(SecurityInformation secInfo)
+        private ResourceType ObjectType;
+
+        protected SafeHandle Handle;
+
+        public static Dictionary<string, int> GetAccessRightMap()
+        {
+            return new Dictionary<string, int>();
+        }
+
+        protected SecurityDescriptorBase(ResourceType objectType)
+        {
+            this.ObjectType = objectType;
+        }
+
+        public RawSecurityDescriptor GetSecurityInfo(SecurityInformation secInfo = SecurityInformation.Dacl)
         {
             SafeSecurityDescriptorBuffer pSecurityDescriptor;
             IntPtr pSidOwner, pSidGroup, pDacl, pSacl = IntPtr.Zero;
 
-            UInt32 res = NativeMethods.GetSecurityInfo(Handle, ObjectType, secInfo,
-                out pSidOwner, out pSidGroup, out pSidDacl, out pSidSacl, out pSecurityDescriptor);
+            Int32 res = NativeMethods.GetSecurityInfo(Handle, ObjectType, secInfo,
+                out pSidOwner, out pSidGroup, out pDacl, out pSacl, out pSecurityDescriptor);
             if (res != 0)
                 throw new SDNativeException(res, String.Format("GetSecurityInfo({0}) failed", secInfo.ToString()));
 
@@ -145,5 +171,13 @@ namespace ansible_collections.ansible.windows.plugins.module_utils.SDBase
                 Marshal.Copy(sdBytes, 0, pSecurityDescriptor.DangerousGetHandle(), sdBytes.Length);
             }
         }
+
+        public void Dispose()
+        {
+            if (Handle != null)
+                Handle.Dispose();
+            GC.SuppressFinalize(this);
+        }
+        ~SecurityDescriptorBase() { this.Dispose(); }
     }
 }
