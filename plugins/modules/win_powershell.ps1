@@ -8,6 +8,8 @@
 
 #AnsibleRequires -PowerShell ..module_utils.Process
 
+using namespace System.Management.Automation.Language
+
 $spec = @{
     options = @{
         arguments = @{ type = 'list'; elements = 'str' }
@@ -223,6 +225,110 @@ namespace Ansible.Windows.WinPowerShell
     }
 }
 '@
+
+Function Add-ScriptToPipeline {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [System.Management.Automation.PowerShell]
+        $Pipeline,
+
+        [Parameter(Mandatory)]
+        [string]
+        $Script,
+
+        [Parameter(Mandatory)]
+        [object]
+        $AnsibleModule,
+
+        [Parameter()]
+        [switch]
+        $IsExternal
+    )
+
+    $systemPolicy = [SystemPolicy]::GetSystemLockdownPolicy()
+    if ($IsExternal -or $systemPolicy -eq 'None') {
+        $null = $Pipeline.AddScript($Script)
+        return
+    }
+
+    $shouldConstrain = $false
+    $utf8 = [UTF8Encoding]::new($false)
+    $tmpPath = [Path]::Combine($AnsibleModule.TmpDir, "ansible-$([Guid]::NewGuid()).ps1")
+    $fs = $null
+    try {
+        # New API added in 5.1 for Win 11/Server 2025 and 7.3+ which we can use
+        # to provide our own FileStream with only access for ourselves.
+        $useNewApi = [SystemPolicy]::GetFilePolicyEnforcement
+
+        $fileOptions = [FileOptions]::None
+        if ($useNewApi) {
+            $fileOptions = $fileOptions -bor [FileOptions]::DeleteOnClose
+        }
+
+        $fs = [FileStream]::new(
+            $tmpPath,
+            [FileMode]::Create,
+            [FileAccess]::ReadWrite,
+            [FileShare]::None,
+            4096,
+            $fileOptions)
+        $sw = [StreamWriter]::new($fs, $utf8, 4096, $true)
+        $sw.Write($Script)
+        $sw.Dispose()
+        $null = $fs.Seek(0, [SeekOrigin]::Begin)
+
+        if ($useNewApi) {
+            $policy = [SystemPolicy]::GetFilePolicyEnforcement(
+                $tmpPath,
+                $fs)
+
+            $shouldConstrain = $policy -ne [SystemScriptFileEnforcement]::Allow
+        }
+        else {
+            # If the new API is not available we rely on the known behaviour
+            # of Get-Command to fail with CommandNotFoundException if the
+            # script is not allowed to run.
+            $fs.Dispose()
+            $fs = $null
+
+            try {
+                $cmd = Get-Command -Name $tmpPath -CommandType ExternalScript -ErrorAction Stop
+            }
+            catch [CommandNotFoundException] {
+                $shouldConstrain = $true
+            }
+
+            # We cannot lock the file as pwsh does not read it with a read
+            # share access. Instead we verify that the cached script contents
+            # that was loaded matched our input to ensure nothing overwrote it
+            # with their own script. We also call the property as a method to
+            # capture and exceptions for easier debugging.
+            $readContents = $cmd.get_ScriptContents()
+            if ($Script -ne $readContents) {
+                throw "Script has been modified during signature check."
+            }
+        }
+    }
+    finally {
+        if ($fs) { $fs.Dispose() }
+        if (Test-Path -LiteralPath $tmpPath) {
+            Remove-Item -LiteralPath $tmpPath -Force
+        }
+    }
+
+    $null = $ps.AddScript({
+
+
+    }).AddStatement()
+
+    if ($shouldConstrain) {
+
+    }
+    else {
+
+    }
+}
 
 Function Get-StdHandle {
     [CmdletBinding()]
@@ -564,11 +670,14 @@ if ($module.CheckMode -and -not $supportsShouldProcess) {
     $module.ExitJson()
 }
 
+$isWDACEnabled = [SystemPolicy]::GetSystemLockdownPolicy() -ne 'None'
+
 $runspace = $null
 $processId = $null
 $newStdout = New-AnonymousPipe
 $newStderr = New-AnonymousPipe
 $freeConsole = $false
+$tempScript = $null
 
 try {
     $oldStdout = Get-StdHandle -Stream Stdout
@@ -651,7 +760,8 @@ try {
         # also need to redirect the stdout/stderr pipes to our anonymous pipe so we can capture any native console
         # output from .NET or calling a native application with 'Start-Process -NoNewWindow'.
 
-        [void]$ps.AddScript(@'
+        if (-not $isWDACEnabled) {
+            [void]$ps.AddScript(@'
 [CmdletBinding()]
 param (
     [Parameter(Mandatory=$true)]
@@ -698,13 +808,14 @@ $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = $utf8No
     &$setHandle -Stream $_.Name -NET $writer -Raw $pipe.SafePipeHandle.DangerousGetHandle()
 }
 '@, $true).AddParameters(@{
-                StdoutHandle = $newStdout.ClientString
-                StderrHandle = $newStderr.ClientString
-                SetStdPInvoke = $stdPinvoke
-                SetScriptBlock = ${function:Set-StdHandle}
-                AddTypeCode = ${function:Add-CSharpType}
-                TmpDir = $module.Tmpdir
-            }).AddStatement()
+                    StdoutHandle = $newStdout.ClientString
+                    StderrHandle = $newStderr.ClientString
+                    SetStdPInvoke = $stdPinvoke
+                    SetScriptBlock = ${function:Set-StdHandle}
+                    AddTypeCode = ${function:Add-CSharpType}
+                    TmpDir = $module.Tmpdir
+                }).AddStatement()
+        }
     }
     else {
         # The psrp connection plugin doesn't have a console so we need to create one ourselves.
@@ -725,7 +836,26 @@ $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = $utf8No
         [void]$ps.AddCommand('Set-Location').AddParameter('LiteralPath', $module.Params.chdir).AddStatement()
     }
 
-    [void]$ps.AddScript($module.Params.script)
+    if ($isWDACEnabled) {
+        # If WDAC is applied we need to run the script from a temporary location
+        # so that PowerShell can perform its normal trust operations. We need
+        # to start from CLM or else we won't be able to run untrusted scripts
+        # in CLM.
+        $tempScript = Join-Path $module.TmpDir "ansible.windows.win_powershell-$([Guid]::NewGuid()).ps1"
+        [File]::WriteAllText($tempScript, $module.Params.script)
+
+        # Using an external process will already be in CLM so this is a safety
+        # check to ensure it doesn't fail when in CLM already.
+        $null = $ps.AddScript({
+            if ($ExecutionContext.SessionState.LanguageMode -ne 'ConstrainedLanguage') {
+                $ExecutionContext.SessionState.LanguageMode = 'ConstrainedLanguage'
+            }
+        }).AddStatement()
+        $null = $ps.AddCommand($tempScript)
+    }
+    else {
+        $null = $ps.AddScript($module.Params.script)
+    }
 
     # We copy the existing parameter dictionary and add/modify the Confirm/WhatIf parameters if the script supports
     # processing. We do a copy to avoid modifying the original Params dictionary just for safety.
@@ -763,7 +893,7 @@ $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = $utf8No
     }
 
     if ($parameters) {
-        [void]$ps.AddParameters($parameters)
+        [void]$ps.AddParameter('Parameters', $parameters)
     }
 
     # We cannot natively call a generic function so need to resort to reflection to get the method we know is there
@@ -826,6 +956,10 @@ finally {
 
     if ($freeConsole) {
         [void][Ansible.Windows.WinPowerShell.NativeMethods]::FreeConsole()
+    }
+
+    if ($tempScript -and (Test-Path -LiteralPath $tempScript)) {
+        Remove-Item -LiteralPath $tempScript -Force
     }
 }
 

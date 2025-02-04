@@ -7,6 +7,8 @@
 #Requires -Module Ansible.ModuleUtils.CommandUtil
 #Requires -Module Ansible.ModuleUtils.FileUtil
 
+using namespace System.Management.Automation.Language
+
 # TODO: add check mode support
 
 Set-StrictMode -Version 2
@@ -75,7 +77,9 @@ If (-not $executable -or $executable -eq "powershell") {
     $exec_application = "powershell.exe"
 
     # force input encoding to preamble-free UTF8 so PS sub-processes (eg, Start-Job) don't blow up
-    $raw_command_line = "[Console]::InputEncoding = New-Object Text.UTF8Encoding `$false; " + $raw_command_line
+    if ([SystemPolicy]::GetSystemLockdownPolicy() -eq 'None') {
+        $raw_command_line = "[Console]::InputEncoding = New-Object Text.UTF8Encoding `$false; " + $raw_command_line
+    }
 
     # Base64 encode the command so we don't have to worry about the various levels of escaping
     $encoded_command = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($raw_command_line))
