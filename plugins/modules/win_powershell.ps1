@@ -226,110 +226,6 @@ namespace Ansible.Windows.WinPowerShell
 }
 '@
 
-Function Add-ScriptToPipeline {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [System.Management.Automation.PowerShell]
-        $Pipeline,
-
-        [Parameter(Mandatory)]
-        [string]
-        $Script,
-
-        [Parameter(Mandatory)]
-        [object]
-        $AnsibleModule,
-
-        [Parameter()]
-        [switch]
-        $IsExternal
-    )
-
-    $systemPolicy = [SystemPolicy]::GetSystemLockdownPolicy()
-    if ($IsExternal -or $systemPolicy -eq 'None') {
-        $null = $Pipeline.AddScript($Script)
-        return
-    }
-
-    $shouldConstrain = $false
-    $utf8 = [UTF8Encoding]::new($false)
-    $tmpPath = [Path]::Combine($AnsibleModule.TmpDir, "ansible-$([Guid]::NewGuid()).ps1")
-    $fs = $null
-    try {
-        # New API added in 5.1 for Win 11/Server 2025 and 7.3+ which we can use
-        # to provide our own FileStream with only access for ourselves.
-        $useNewApi = [SystemPolicy]::GetFilePolicyEnforcement
-
-        $fileOptions = [FileOptions]::None
-        if ($useNewApi) {
-            $fileOptions = $fileOptions -bor [FileOptions]::DeleteOnClose
-        }
-
-        $fs = [FileStream]::new(
-            $tmpPath,
-            [FileMode]::Create,
-            [FileAccess]::ReadWrite,
-            [FileShare]::None,
-            4096,
-            $fileOptions)
-        $sw = [StreamWriter]::new($fs, $utf8, 4096, $true)
-        $sw.Write($Script)
-        $sw.Dispose()
-        $null = $fs.Seek(0, [SeekOrigin]::Begin)
-
-        if ($useNewApi) {
-            $policy = [SystemPolicy]::GetFilePolicyEnforcement(
-                $tmpPath,
-                $fs)
-
-            $shouldConstrain = $policy -ne [SystemScriptFileEnforcement]::Allow
-        }
-        else {
-            # If the new API is not available we rely on the known behaviour
-            # of Get-Command to fail with CommandNotFoundException if the
-            # script is not allowed to run.
-            $fs.Dispose()
-            $fs = $null
-
-            try {
-                $cmd = Get-Command -Name $tmpPath -CommandType ExternalScript -ErrorAction Stop
-            }
-            catch [CommandNotFoundException] {
-                $shouldConstrain = $true
-            }
-
-            # We cannot lock the file as pwsh does not read it with a read
-            # share access. Instead we verify that the cached script contents
-            # that was loaded matched our input to ensure nothing overwrote it
-            # with their own script. We also call the property as a method to
-            # capture and exceptions for easier debugging.
-            $readContents = $cmd.get_ScriptContents()
-            if ($Script -ne $readContents) {
-                throw "Script has been modified during signature check."
-            }
-        }
-    }
-    finally {
-        if ($fs) { $fs.Dispose() }
-        if (Test-Path -LiteralPath $tmpPath) {
-            Remove-Item -LiteralPath $tmpPath -Force
-        }
-    }
-
-    $null = $ps.AddScript({
-
-
-    }).AddStatement()
-
-    if ($shouldConstrain) {
-
-    }
-    else {
-
-    }
-}
-
 Function Get-StdHandle {
     [CmdletBinding()]
     param (
@@ -893,7 +789,7 @@ $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = $utf8No
     }
 
     if ($parameters) {
-        [void]$ps.AddParameter('Parameters', $parameters)
+        [void]$ps.AddParameters($parameters)
     }
 
     # We cannot natively call a generic function so need to resort to reflection to get the method we know is there
