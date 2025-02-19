@@ -8,7 +8,7 @@
 
 #AnsibleRequires -PowerShell ..module_utils.Process
 
-using namespace System.Management.Automation.Language
+using namespace System.Management.Automation.Security
 
 $spec = @{
     options = @{
@@ -743,10 +743,10 @@ $OutputEncoding = [Console]::InputEncoding = [Console]::OutputEncoding = $utf8No
         # Using an external process will already be in CLM so this is a safety
         # check to ensure it doesn't fail when in CLM already.
         $null = $ps.AddScript({
-            if ($ExecutionContext.SessionState.LanguageMode -ne 'ConstrainedLanguage') {
-                $ExecutionContext.SessionState.LanguageMode = 'ConstrainedLanguage'
-            }
-        }).AddStatement()
+                if ($ExecutionContext.SessionState.LanguageMode -ne 'ConstrainedLanguage') {
+                    $ExecutionContext.SessionState.LanguageMode = 'ConstrainedLanguage'
+                }
+            }).AddStatement()
         $null = $ps.AddCommand($tempScript)
     }
     else {
