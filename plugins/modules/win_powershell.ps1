@@ -8,6 +8,7 @@
 
 #AnsibleRequires -PowerShell ..module_utils.Process
 
+using namespace System.IO
 using namespace System.Management.Automation.Security
 
 $spec = @{
