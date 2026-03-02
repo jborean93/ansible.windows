@@ -1,0 +1,506 @@
+# Copyright: (c) 2026, Ansible Project
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+
+DOCUMENTATION:
+  module: win_scheduled_task_info
+  short_description: Retrieve information about scheduled tasks
+  description:
+    - Retrieve information about scheduled tasks on a Windows system.
+  options:
+    name:
+      description:
+        - Name of the scheduled task to retrieve information about.
+        - If not set, all the tasks in the specified folder will be returned.
+      type: str
+    path:
+      description:
+        - Path of the scheduled task to retrieve information about.
+        - If not set, the root folder will be used.
+      default: '\'
+      type: str
+  notes:
+    - Any return values representing an enum or flags definition will be returned as a string. If
+      the value is not known it will be returned as the hexadecimal of that value. This hexadecimal
+      is not reliable and should not be used in playbook logic as future versions of this module
+      may add the mapping to a well known string. Only string values defined in the return
+      documentation are guaranteed to be stable.
+    - Most return values that represent a time duration will be returned in the ISO 8601 duration
+      format V(P[n]Y[n]M[n]DT[n]H[n]M[n]S).
+    - Most return values that represent a date and time will be returned in the ISO 8601 format
+      V(YYYY-MM-DDTHH:MM:SS.ssssssZ) in UTC but some exceptions may apply if the value is user
+      defined and the format cannot be guaranteed.
+  seealso:
+    - module: ansible.windows.win_scheduled_task
+  author:
+    - Ansible Core Team
+
+EXAMPLES: |
+  - name: Get information about a specific scheduled task in the root folder
+    ansible.windows.win_scheduled_task_info:
+      name: MyTask
+
+  - name: Get information about all scheduled tasks in a specific folder
+    ansible.windows.win_scheduled_task_info:
+      path: \TaskFolder
+
+RETURN:
+  folder_exists:
+    description: Whether the specified folder exists or not.
+    returned: always
+    type: bool
+    sample: true
+  tasks:
+    description: List of scheduled tasks matching the specified criteria.
+    returned: always
+    type: list
+    elements: dict
+    contains:
+      name:
+        description: Name of the scheduled task.
+        type: str
+        sample: MyTask
+      enabled:
+        description: Whether the scheduled task is enabled or not.
+        type: bool
+        sample: true
+      last_run_time:
+        description: Last time the scheduled task was run specified in UTC.
+        type: str
+        sample: "2026-03-02T03:21:19.0000000Z"
+      last_task_result:
+        description: Result of the last run of the scheduled task.
+        type: int
+        sample: 0
+      next_run_time:
+        description: Next time the scheduled task is set to run specified in UTC.
+        type: str
+        sample: "2026-03-03T03:21:19.0000000Z"
+      number_of_missed_runs:
+        description: Number of times the task has missed a scheduled run.
+        type: int
+        sample: 0
+      path:
+        description: Path of the scheduled task.
+        type: str
+        sample: \TaskFolder\MyTask
+      state:
+        description:
+          - State of the scheduled task.
+          - Can be V(ready), V(running), V(disabled), V(queued), or V(unknown).
+        type: str
+        sample: ready
+
+      actions:
+        description:
+          - List of actions associated with the scheduled task.
+          - Some elements may only be present based on the type of action.
+        type: list
+        elements: dict
+        contains:
+          type:
+            description:
+              - Type of the action.
+              - Can be V(exe), V(com_handler), V(send_email), or V(show_message).
+            type: str
+            sample: exec
+          id:
+            description: Identifier of the action.
+            type: str
+            sample: null
+          command:
+            description:
+              - Command configured for the action.
+              - Only present for actions of type V(exec).
+            type: str
+            sample: C:\Program Files\MyApp\app.exe
+          arguments:
+            description:
+              - Arguments configured for the action.
+              - Only present for actions of type V(exec).
+            type: str
+            sample: --run
+          working_directory:
+            description:
+              - Working directory configured for the action.
+              - Only present for actions of type V(exec).
+            type: str
+            sample: C:\Program Files\MyApp
+          class_id:
+            description:
+              - ClassId configured for the action.
+              - Only present for actions of type V(com_handler).
+            type: str
+            sample: null
+          data:
+            description:
+              - Data configured for the action.
+              - Only present for actions of type V(com_handler).
+            type: str
+            sample: null
+
+      data:
+        description: Additional data associated with the scheduled task.
+        type: str
+        sample: null
+
+      principal:
+        description: Information about the principal configured for the scheduled task.
+        type: dict
+        contains:
+          id:
+            description: Identifier of the principal, this is not the username.
+            type: str
+            sample: Author
+          display_name:
+            description: User defined display name of the principal.
+            type: str
+            sample: null
+          user_id:
+            description: The principal username.
+            type: str
+            sample: DOMAIN\User
+          logon_type:
+            description:
+              - Logon type configured for the principal.
+              - Can be V(group), V(interactive_token), V(interactive_token_or_password), V(password), V(s4u), or V(service_account).
+            type: str
+            sample: password
+          group_id:
+            description: Identifier of the group if the logon type is V(group).
+            type: str
+            sample: null
+          run_level:
+            description:
+              - The principal level required to run the task for this principal.
+              - Can be V(limited) or V(highest).
+            type: str
+            sample: lua
+          process_token_sid:
+            description:
+              - Describes the process token sid configured for the principal.
+              - Can be V(none), V(unrestricted), or V(default).
+            type: str
+            sample: none
+          required_privileges:
+            description: List of privileges required for the principal.
+            type: list
+            elements: str
+            sample: ['SeBackupPrivilege', 'SeChangeNotifyPrivilege']
+
+      registration_info:
+        description:
+          - Information about the registration of the scheduled task.
+          - These values are user defined so the format cannot be relied upon.
+        type: dict
+        contains:
+          author:
+            description: Author of the scheduled task.
+            type: str
+            sample: Some Author
+          date:
+            description: The date and time when the task is registered.
+            type: str
+            sample: null
+          description:
+            description: Description of the scheduled task.
+            type: str
+            sample: This task does something important.
+          documentation:
+            description: Documentation associated with the scheduled task.
+            type: str
+            sample: null
+          source:
+            description: Source of the scheduled task.
+            type: str
+            sample: null
+          uri:
+            description: URI of the scheduled task.
+            type: str
+            sample: null
+          version:
+            description: Version of the scheduled task.
+            type: str
+            sample: null
+
+      settings:
+        description: Information about the settings of the scheduled task.
+        type: dict
+        contains:
+          alllow_demand_start:
+            description: Whether the scheduled task can be started on demand or not.
+            type: bool
+            sample: true
+          restart_interval:
+            description: The interval between restarts for a scheduled task that is configured to restart.
+            type: str
+            sample: null
+          restart_count:
+            description: The number of times the task will be restarted if it is configured to restart.
+            type: int
+            sample: 0
+          multiple_instances:
+            description:
+              - The behavior of the task when a new instance is triggered while another instance is still
+              - This can be V(ignore_new), V(parallel), V(queue), or V(stop_existing).
+            type: str
+            sample: ignore_new
+          stop_if_going_on_batteries:
+            description: Whether the task will be stopped if the system is running on batteries or not.
+            type: bool
+            sample: false
+          disallow_start_if_on_batteries:
+            description: Whether the task will be prevented from starting if the system is running on batteries or not.
+            type: bool
+            sample: false
+          allow_hard_terminate:
+            description: Whether the task can be terminated forcefully or not.
+            type: bool
+            sample: true
+          start_when_available:
+            description: Whether the task will be started as soon as possible after a scheduled start is missed or not.
+            type: bool
+            sample: true
+          run_only_if_network_available:
+            description: Whether the task will only run if a network connection is available or not.
+            type: bool
+            sample: false
+          enabled:
+            description: Whether the scheduled task is enabled or not.
+            type: bool
+            sample: true
+          delete_expired_task_after:
+            description: Time after which an expired task will be deleted.
+            type: str
+            sample: null
+          priority:
+            description: Priority level of the task.
+            type: int
+            sample: 7
+          compatibility:
+            description:
+              - Compatibility level of the task.
+              - This can be V(at), V(v1), V(v2), V(v2_1), V(v2_2), V(v2_3), or V(v2_4).
+            type: str
+            sample: null
+          hidden:
+            description: Whether the scheduled task is hidden or not.
+            type: bool
+            sample: false
+          idle_settings:
+            description: Information about the idle settings of the scheduled task.
+            type: dict
+            contains:
+              idle_duration:
+                description: The amount of idle time required before the task can run.
+                type: str
+                sample: null
+              wait_timeout:
+                description: The amount of time the task will wait for the system to become idle before it is started.
+                type: str
+                sample: null
+              stop_on_idle_end:
+                description: Whether the task will be stopped when the system is no longer idle or not.
+                type: bool
+                sample: false
+              restart_on_idle:
+                description: Whether the task will be restarted when the system becomes idle again or not.
+                type: bool
+                sample: false
+          run_only_if_idle:
+            description: Whether the task will only run if the system is idle or not.
+            type: bool
+            sample: false
+          wake_to_run:
+            description: Whether the task will wake the system to run or not.
+            type: bool
+            sample: false
+          network_settings:
+            description: Information about the network settings of the scheduled task.
+            type: dict
+            contains:
+              name:
+                description: Name of the network profile configured for the task.
+                type: str
+                sample: null
+              id:
+                description: The GUID identifier of the network profile configured for the task.
+                type: str
+                sample: null
+          disallow_start_on_remote_app_session:
+            description: Whether the task will be prevented from starting in a Remote Applications Integrated Locally session.
+            type: bool
+            sample: false
+          use_unified_scheduling_engine:
+            description: Whether the task is configured to use the unified scheduling engine or not.
+            type: bool
+            sample: false
+          maintenance_settings:
+            description: Information about the maintenance settings of the scheduled task.
+            type: dict
+            contains:
+              period:
+                description: The amount of time the task needs to be once executed during regular maintenance time windows.
+                type: str
+                sample: null
+              deadline:
+                description: The amount of time after which the scheduler attempts to run the task during maintenance.
+                type: str
+                sample: null
+              exclusive:
+                description: Indicates whether the task scheduler must start the task in the maintenance window in exclusive mode or not.
+                type: bool
+                sample: false
+          volatile:
+            description: Whether the task is automatically disabled everytime Windows starts.
+            type: bool
+            sample: false
+
+      triggers:
+        description:
+          - List of triggers associated with the scheduled task.
+          - Some elements are only present based on the type of trigger.
+        type: list
+        elements: dict
+        contains:
+          type:
+            description:
+              - Type of the trigger.
+              - Can be V(event), V(time), V(daily), V(weekly), V(monthly), V(monthlydow), V(idle), V(registration),
+                V(boot), V(logon), V(session_state_change), or V(wnf_state_change).
+            type: str
+            sample: time
+          id:
+            description: Identifier of the trigger.
+            type: str
+            sample: null
+          start_boundary:
+            description: The date and time when the trigger becomes active specified in UTC.
+            type: str
+            sample: "2026-03-02T04:06:10.0000000Z"
+          end_boundary:
+            description: The date and time when the trigger expires specified in UTC.
+            type: str
+            sample: null
+          enabled:
+            description: Whether the trigger is enabled or not.
+            type: bool
+            sample: true
+          execution_time_limit:
+            description: The time limit for the execution of the task after being triggered.
+            type: str
+            sample: P3D
+          repetition:
+            description: Information about the repetition pattern for the trigger.
+            type: dict
+            contains:
+              interval:
+                description: The interval between repetitions.
+                type: str
+                sample: PT1H
+              duration:
+                description: The duration for which the repetition pattern is active.
+                type: str
+                sample: P1D
+              stop_at_duration_end:
+                description: Whether the task will be stopped when the duration end is reached or not.
+                type: bool
+                sample: false
+              repeat_count:
+                description: The number of times the task will be repeated.
+                type: int
+                sample: 0
+          delay:
+            description:
+              - The amount of time to delay the start of the task after the trigger is activated.
+              - Only present for triggers of type V(event), V(registration), V(boot), v(logon), and V(session_state_change).
+            type: str
+            sample: null
+          random_delay:
+            description:
+              - The maximum amount of random delay to be added to the start time of the task after the trigger is activated.
+              - Only present for triggers of type V(time), V(daily), V(weekly), V(monthly), and V(monthlydow).
+            type: str
+            sample: null
+          subscription:
+            description:
+              - The event query subscription for the trigger.
+              - Only present for triggers of type V(event).
+            type: str
+            sample: null
+          value_queries:
+            description:
+              - List of value queries for the trigger.
+              - Only present for triggers of type V(event).
+              - Each list element contains the name and value of the query.
+            type: list
+            elements: dict
+            sample: [{"name": "EventID", "value": "1234", "type": "integer"}]
+          days_interval:
+            description:
+              - The interval in days the trigger repeats on.
+              - Only present for triggers of type V(daily).
+            type: int
+            sample: 1
+          weeks_interval:
+            description:
+              - The interval in weeks the trigger repeats on.
+              - Only present for triggers of type V(weekly).
+            type: int
+            sample: 1
+          days_of_week:
+            description:
+              - List of days of the week the trigger is active on.
+              - Only present for triggers of type V(weekly) and V(monthlydow).
+              - Each list element can be V(sunday), V(monday), V(tuesday), V(wednesday), V(thursday), V(friday), or V(saturday).
+            type: list
+            elements: str
+            sample: [monday, wednesday, friday]
+          days_of_month:
+            description:
+              - List of days of the month the trigger is active on.
+              - Only present for triggers of type V(monthly).
+              - Each list element can be an integer from 1 to 31 or the string V(last) to indicate the last day of the month.
+            type: list
+            elements: raw
+            sample: [1, 15, last]
+          weeks_of_month:
+            description:
+              - List of weeks of the month the trigger is active on.
+              - Only present for triggers of type V(monthlydow).
+              - Each list element can be an integer from 1 to 4 representing the week of the month.
+            type: list
+            elements: int
+            sample: [1, 3]
+          run_on_last_week_of_month:
+            description:
+              - Whether the task will be run on the last week of the month.
+              - Only present for triggers of type V(monthlydow).
+            type: bool
+            sample: true
+          months_of_year:
+            description:
+              - List of months of the year the trigger is active on.
+              - Only present for triggers of type V(monthly), and V(monthlydow).
+              - Each list element can be an integer from 1 to 12.
+            type: list
+            elements: int
+            sample: [1, 6]
+          run_on_last_day_of_month:
+            description:
+              - Whether the task will be run on the last day of the month.
+              - Only present for triggers of type V(monthly).
+            type: bool
+            sample: true
+          user_id:
+            description:
+              - The user for which the trigger is active.
+              - Only present for triggers of type V(logon), and V(session_state_change).
+            type: str
+            sample: DOMAIN\User
+          state_change:
+            description:
+              - The session state change that activates the trigger.
+              - Only present for triggers of type V(session_state_change).
+              - Can be V(console_connect), V(console_disconnect), V(remote_connect), V(remote_disconnect), V(session_lock), or V(session_unlock).
+            type: str
+            sample: console_connect
