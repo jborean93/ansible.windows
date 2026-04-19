@@ -317,7 +317,7 @@ stages:
       - template: templates/matrix.yml
         parameters:
           nameFormat: PowerShell {0}
-          testFormat: powershell/{0}
+          testFormat: devel/powershell/{0}
           targets:
             - name: 7.6
 
