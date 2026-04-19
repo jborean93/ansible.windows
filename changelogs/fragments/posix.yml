@@ -1,0 +1,4 @@
+minor_changes:
+  - win_ping - Added support for running on non-Windows targets
+  - win_powershell - Added support for running on non-Windows targets
+  - win_tempfile - Added support for running on non-Windows targets
