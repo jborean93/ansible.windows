@@ -51,7 +51,7 @@
           @($null),
           @{
               key = 'value'
-              exceed = Get-Item $pwd.Path
+              exceed = Get-Item ([IO.Path]::GetTempPath())
           }
       )
 
@@ -94,7 +94,7 @@
           }
       }
 
-      Get-Item $pwd.Path
+      Get-Item ([IO.Path]::GetTempPath())
 
   register: output_types
 
@@ -175,7 +175,7 @@
     - output_types.output[22][5] == [1]
     - output_types.output[22][6] == [None]
     - output_types.output[22][7]['key'] == 'value'
-    - output_types.output[22][7]['exceed'] | lower == pwd
+    - output_types.output[22][7]['exceed'] | lower == test_tmpdir
 
     - output_types.output[23] == {}
 
@@ -202,7 +202,7 @@
 
     - output_types.output[27]['BaseName'] | lower is string
     - output_types.output[27]['Exists'] == True
-    - output_types.output[27]['FullName'] | lower == pwd
+    - output_types.output[27]['FullName'] | lower == test_tmpdir
     - output_types.output[27]['PSDrive']['Name'] is string
     - output_types.output[27]['PSDrive']['Provider'] == 'Microsoft.PowerShell.Core\FileSystem'
     - output_types.output[27]['PSProvider']['ImplementingType'] == 'Microsoft.PowerShell.Commands.FileSystemProvider'

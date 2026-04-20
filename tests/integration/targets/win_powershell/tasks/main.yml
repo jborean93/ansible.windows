@@ -3,11 +3,11 @@
     script: |
       @{
           IsWindows = $IsWindows -or $PSVersionTable.PSVersion -lt "6.0"
-          Pwd = $pwd.Path.ToLowerInvariant()
+          Tmpdir = (([IO.Path]::GetTempPath())).ToLowerInvariant()
       }
   register:
     is_windows: _task.result.output[0].IsWindows
-    pwd: _task.result.output[0].Pwd
+    test_tmpdir: _task.result.output[0].Tmpdir
   changed_when: False
 
 - name: get datetimes used for tests
