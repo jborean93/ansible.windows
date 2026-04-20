@@ -44,17 +44,18 @@
       [- abc
     dest: '{{ remote_tmp_dir }}/syntax-error.ps1'
 
-# - name: run failure tests
-#   import_tasks: failure.yml
+- name: run failure tests
+  import_tasks: failure.yml
 
 - name: run tests using current interpreter
   import_tasks: tests.yml
 
 - name: run tests using executable
   import_tasks: tests.yml
-  when: is_windows
+  when:
+  - is_windows
   vars:
-    pwsh_executable: powershell.exe
+    pwsh_executable: '{{ ansible_pwsh_interpreter | default("powershell.exe") }}'
 
 - name: run executable with arguments
   win_powershell:

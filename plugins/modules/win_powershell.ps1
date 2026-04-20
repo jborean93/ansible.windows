@@ -67,6 +67,11 @@ $module.Result.information = @()
 if (-not (Get-Variable -Name IsWindows -ErrorAction Ignore)) {
     Set-Variable -Name IsWindows -Value $true
 }
+
+if ($module.Params.executable -and -not $IsWindows) {
+    $module.FailJson("executable cannot be used on a non-Windows target, set ansible_pwsh_interpreter instead.")
+}
+
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
 
 $stdPinvoke = @'
@@ -960,6 +965,16 @@ if ($PSVersionTable.PSVersion -lt '6.0') {
     $resultPipeline.Runspace = $runspace
     $result = $resultPipeline.AddScript('$Ansible').Invoke()[0]
 
+    $runspace.Dispose()
+    $runspace = $null  # Avoids the dispose in the finally block
+
+    if ($processId) {
+        # If running in another process we need to stop it so our CloseAndGetOutput
+        # below does not block.
+        Stop-Process -Id $processId -Force
+        $processId = $null  # Avoids the stop in the finally block
+    }
+
     $hostOut = $newStdout.CloseAndGetOutput()
     $hostErr = $newStderr.CloseAndGetOutput()
 }
@@ -968,7 +983,7 @@ finally {
         $runspace.Dispose()
     }
     if ($processId) {
-        Stop-Process -Id $processId -Force
+        Stop-Process -Id $processId -Force -ErrorAction Ignore
     }
 
     $newStdout, $newStderr | ForEach-Object Dispose
