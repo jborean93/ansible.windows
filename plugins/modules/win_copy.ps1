@@ -395,6 +395,10 @@ elseif ($copy_mode -eq "remote") {
         }
         $result.dest = $remote_dest
         $parent_dir = Split-Path -LiteralPath $remote_dest
+        if (-not $parent_dir) {
+            $parent_dir = $pwd.Path
+            $remote_dest = Join-Path -Path $parent_dir -ChildPath $remote_dest
+        }
 
         if (Test-Path -LiteralPath $parent_dir -PathType Leaf) {
             Fail-Json -obj $result -message "object at destination parent dir '$parent_dir' is currently a file"
@@ -438,6 +442,11 @@ elseif ($copy_mode -eq "single") {
         $remote_dest = Join-Path -Path $dest -ChildPath $original_basename
     }
     $parent_dir = Split-Path -LiteralPath $remote_dest
+
+    # If $remote_dest is just the filename, it is relative to the cwd
+    if (-not $parent_dir) {
+        $parent_dir = $pwd.Path
+    }
 
     # check if the dest parent dirs exist, need to fail if they don't
     if (Test-Path -LiteralPath $parent_dir -PathType Leaf) {

@@ -27,7 +27,13 @@ options:
     default: yes
   dest:
     description:
-    - Remote absolute path where the file should be copied to.
+    - Remote path where the file should be copied to.
+    - If the path is not absolute, the path will be relative to the current
+      working directory of the module process. As the cwd is dependent on the
+      connection plugin being used and how it spawns the remote process there
+      there are no guarantees that the cwd will be the same between different
+      connection plugins. Using an absolute path is recommended to ensure a
+      consistent result.
     - If C(src) is a directory, this must be a directory too.
     - Use \ for path separators or \\ when in "double quotes".
     - If C(dest) ends with \ then source or the contents of source will be

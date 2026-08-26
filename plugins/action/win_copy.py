@@ -464,6 +464,11 @@ class ActionModule(ActionBase):
                 filename = os.path.basename(unix_path)
                 check_dest = os.path.dirname(unix_path)
 
+                # If dest=filename.txt then there is no dirname so we use '.'
+                # ensure Get-AnsibleParam does not fail on an empty value.
+                if not check_dest:
+                    check_dest = '.'
+
             file_checksum = _get_local_checksum(force, source_full)
             source_files['files'].append(
                 dict(

@@ -536,3 +536,26 @@
     - copy_complex.size == 8  # 4 bytes for copy and (4 + 4) bytes for existing files in dest
     - copy_complex_actual.stat.exists
     - copy_complex_actual.stat.checksum == 'c79a6506c1c948be0d456ab5104d5e753ab2f3e6'
+
+- name: copy remote file using just filename for dest
+  win_copy:
+    src: '{{ test_win_copy_path }}\source\foo.txt'
+    dest: remote-file.txt
+    remote_src: true
+  register: copy_remote_file_using_filename_for_dest
+
+- name: get result of copy remote file using just filename for dest
+  win_stat:
+    path: '{{ win_cwd }}\remote-file.txt'
+  register: copy_remote_file_using_filename_for_dest_actual
+
+- name: assert copy file using just filename for dest
+  assert:
+    that:
+    - copy_remote_file_using_filename_for_dest is changed
+    - copy_remote_file_using_filename_for_dest.checksum == 'c79a6506c1c948be0d456ab5104d5e753ab2f3e6'
+    - copy_remote_file_using_filename_for_dest.dest == 'remote-file.txt'
+    - copy_remote_file_using_filename_for_dest.operation == 'file_copy'
+    - copy_remote_file_using_filename_for_dest.size == 8
+    - copy_remote_file_using_filename_for_dest_actual.stat.exists == True
+    - copy_remote_file_using_filename_for_dest_actual.stat.checksum == 'c79a6506c1c948be0d456ab5104d5e753ab2f3e6'
